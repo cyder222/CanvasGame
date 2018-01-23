@@ -1,0 +1,1021 @@
+[1mdiff --git a/Assets/Network.meta b/Assets/Network.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..7c982a6[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Network.meta[m
+[36m@@ -0,0 +1,9 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: a7119d355fa68d2468a7df81c5b05c50[m
+[32m+[m[32mfolderAsset: yes[m
+[32m+[m[32mtimeCreated: 1448240260[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mDefaultImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Network/CharactorInfoEmitter.cs b/Assets/Network/CharactorInfoEmitter.cs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..8386263[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Network/CharactorInfoEmitter.cs[m
+[36m@@ -0,0 +1,134 @@[m
+[32m+[m[32m﻿using System;[m
+[32m+[m[32musing System.Collections.Generic;[m
+[32m+[m[32musing System.Linq;[m
+[32m+[m[32musing System.Text;[m
+[32m+[m[32musing UnityEngine;[m
+[32m+[m[32musing SocketIO;[m
+[32m+[m[32musing System.Threading;[m
+[32m+[m[32musing UnityStandardAssets._2D;[m
+[32m+[m[32mnamespace Assets.Network[m
+[32m+[m[32m{[m
+[32m+[m
+[32m+[m[32m    class CharactorInfoEmitter[m
+[32m+[m[32m    {[m
+[32m+[m
+[32m+[m[32m        //以下ネットワーク通信用の処理系[m
+[32m+[m[32m        readonly static string POSITION_X = "x";[m
+[32m+[m[32m        readonly static string POSITION_Y = "y";[m
+[32m+[m[32m        readonly static string POSITION_Z = "z";[m
+[32m+[m[32m        readonly static string ROTATE_X = "rx";[m
+[32m+[m[32m        readonly static string ROTATE_Y = "ry";[m
+[32m+[m[32m        readonly static string ROTATE_Z = "rz";[m
+[32m+[m[32m        readonly static string SCALE_X = "sx";[m
+[32m+[m[32m        readonly static string SCALE_Y = "sy";[m
+[32m+[m[32m        readonly static string SCALE_Z = "sz";[m
+[32m+[m[32m        readonly static string IS_JUMP = "J";[m
+[32m+[m[32m        readonly static string MOVE_DIR = "MD";[m
+[32m+[m[32m        readonly static string IS_CLOUCH = "C";[m
+[32m+[m[32m        readonly static string EMIT_TIME = "ET";[m
+[32m+[m[32m        readonly static string OWNER_ID = "OI";[m
+[32m+[m
+[32m+[m[32m        private static SocketIOComponent socket = null;[m
+[32m+[m[41m        [m
+[32m+[m[32m        private CharactorControl m_CharacterControl;[m
+[32m+[m[32m        private bool start;[m
+[32m+[m[32m        private bool emit_wait;[m
+[32m+[m[32m        private Thread emit_thread;[m
+[32m+[m[32m        private Mutex emit_mutex;[m
+[32m+[m[32m        private JSONObject jsonObject = new JSONObject(JSONObject.Type.OBJECT);[m
+[32m+[m[32m        public CharactorInfoEmitter(CharactorControl emit_control)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            m_CharacterControl = emit_control;[m
+[32m+[m[32m            emit_mutex = new Mutex();[m
+[32m+[m[32m            start = false;[m
+[32m+[m[32m            emit_wait = false;[m
+[32m+[m[32m            if (socket == null)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                try[m
+[32m+[m[32m                {[m
+[32m+[m[32m                    GameObject go = GameObject.Find("SocketIO");[m
+[32m+[m[32m                    socket = go.GetComponent<SocketIOComponent>();[m
+[32m+[m[32m                }[m
+[32m+[m[32m                catch (Exception e)[m
+[32m+[m[32m                {[m
+[32m+[m[32m                    Debug.Log("Cannot found server interface program!"+e.Message);[m
+[32m+[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[41m           [m
+[32m+[m[41m            [m
+[32m+[m[32m            emit_thread = new Thread(new ThreadStart(()=> {[m
+[32m+[m[32m                lock(emit_mutex)[m
+[32m+[m[32m                {[m
+[32m+[m[32m                    while (true)[m
+[32m+[m[32m                    {[m
+[32m+[m[32m                        while (!start)[m
+[32m+[m[32m                        {[m
+[32m+[m[32m                            Monitor.Wait(emit_mutex);[m
+[32m+[m[32m                        }[m
+[32m+[m[41m                        [m
+[32m+[m[32m                        TaskSystem.getInstance().addTask(() =>[m
+[32m+[m[32m                        {[m
+[32m+[m[32m                            EmitData(m_CharacterControl.transform, m_CharacterControl.getJump(), m_CharacterControl.getMoveDirection(),[m
+[32m+[m[32m                                 m_CharacterControl.getClouch(), UnityEngine.Time.realtimeSinceStartup);[m
+[32m+[m[32m                        });[m
+[32m+[m[32m                        emit_wait = true;[m
+[32m+[m[32m                        while(emit_wait)[m
+[32m+[m[32m                        {[m
+[32m+[m[32m                            Monitor.Wait(emit_mutex);[m
+[32m+[m[41m                            [m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }));[m
+[32m+[m[32m            emit_thread.Start();[m
+[32m+[m[32m        }[m
+[32m+[m[32m        public void StartEmit()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            lock(emit_mutex)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                start = true;[m
+[32m+[m[32m                Monitor.Pulse(emit_mutex);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        public void StopEmit()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            this.start = false;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        public void EmitData(Transform transform,bool is_jump,bool move_left,bool is_clouch,float emit_time)[m
+[32m+[m[32m        {[m
+[32m+[m[41m           [m
+[32m+[m[32m            Vector3 position = transform.position;[m
+[32m+[m[32m            Quaternion rotate = transform.rotation;[m
+[32m+[m[32m            Vector3 scale = transform.localScale;[m
+[32m+[m[41m           [m
+[32m+[m[32m            jsonObject.Clear();[m
+[32m+[m[32m            jsonObject.AddField(POSITION_X, position.x);[m
+[32m+[m[32m            jsonObject.AddField(POSITION_Y, position.y);[m
+[32m+[m[32m            jsonObject.AddField(POSITION_Z, position.z);[m
+[32m+[m[32m            jsonObject.AddField(ROTATE_X, rotate.x);[m
+[32m+[m[32m            jsonObject.AddField(ROTATE_Y, rotate.y);[m
+[32m+[m[32m            jsonObject.AddField(ROTATE_Z, rotate.z);[m
+[32m+[m[32m            jsonObject.AddField(SCALE_X, scale.x);[m
+[32m+[m[32m            jsonObject.AddField(SCALE_Y, scale.y);[m
+[32m+[m[32m            jsonObject.AddField(SCALE_Z, scale.z);[m
+[32m+[m[32m            jsonObject.AddField(MOVE_DIR,move_left);[m
+[32m+[m[32m            jsonObject.AddField(IS_JUMP, is_jump);[m
+[32m+[m[32m            jsonObject.AddField(IS_CLOUCH, is_clouch);[m
+[32m+[m[32m            jsonObject.AddField(EMIT_TIME, emit_time);[m
+[32m+[m[32m            jsonObject.AddField(OWNER_ID, socket.sid);[m
+[32m+[m
+[32m+[m[32m            socket.Emit("CharactorUpdate", jsonObject);[m
+[32m+[m[32m            lock(emit_mutex)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                emit_wait = false;[m
+[32m+[m[32m                Monitor.Pulse(emit_mutex);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        public void OnSendComplete(SocketIOEvent e)[m
+[32m+[m[32m        {[m
+[32m+[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/Assets/Network/CharactorInfoEmitter.cs.meta b/Assets/Network/CharactorInfoEmitter.cs.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..6ddce71[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Network/CharactorInfoEmitter.cs.meta[m
+[36m@@ -0,0 +1,12 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: e5f4e1baeca6c0948968a81849488984[m
+[32m+[m[32mtimeCreated: 1448240261[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mMonoImporter:[m
+[32m+[m[32m  serializedVersion: 2[m
+[32m+[m[32m  defaultReferences: [][m
+[32m+[m[32m  executionOrder: 0[m
+[32m+[m[32m  icon: {instanceID: 0}[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Network/NetworkCharactor.prefab b/Assets/Network/NetworkCharactor.prefab[m
+[1mnew file mode 100644[m
+[1mindex 0000000..e83769e[m
+Binary files /dev/null and b/Assets/Network/NetworkCharactor.prefab differ
+[1mdiff --git a/Assets/Network/NetworkCharactor.prefab.meta b/Assets/Network/NetworkCharactor.prefab.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..60d99a8[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Network/NetworkCharactor.prefab.meta[m
+[36m@@ -0,0 +1,8 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: b2c3720330c3a8f4faef74bdbcc2f914[m
+[32m+[m[32mtimeCreated: 1448434969[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mNativeFormatImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/PlayerStateChanger.cs b/Assets/PlayerStateChanger.cs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..e90687f[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/PlayerStateChanger.cs[m
+[36m@@ -0,0 +1,16 @@[m
+[32m+[m[32m﻿using UnityEngine;[m
+[32m+[m[32musing System.Collections;[m
+[32m+[m
+[32m+[m[32mpublic class PlayerStateChanger : MonoBehaviour {[m
+[32m+[m
+[32m+[m	[32m// Use this for initialization[m
+[32m+[m	[32mvoid Start () {[m
+[32m+[m[41m	    [m
+[32m+[m	[32m}[m
+[32m+[m[41m	[m
+[32m+[m	[32m// Update is called once per frame[m
+[32m+[m	[32mvoid Update () {[m
+[32m+[m[41m        [m
+[32m+[m[41m       [m
+[32m+[m	[32m}[m
+[32m+[m[32m}[m
+[1mdiff --git a/Assets/PlayerStateChanger.cs.meta b/Assets/PlayerStateChanger.cs.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..04586dd[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/PlayerStateChanger.cs.meta[m
+[36m@@ -0,0 +1,12 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: aaac20170d0e6564ba046e0eb394d82e[m
+[32m+[m[32mtimeCreated: 1448100040[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mMonoImporter:[m
+[32m+[m[32m  serializedVersion: 2[m
+[32m+[m[32m  defaultReferences: [][m
+[32m+[m[32m  executionOrder: 0[m
+[32m+[m[32m  icon: {instanceID: 0}[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Resources/Prefab/Charactor.meta b/Assets/Resources/Prefab/Charactor.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..ea87dab[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Resources/Prefab/Charactor.meta[m
+[36m@@ -0,0 +1,9 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: d8ad6d4d2cfdb48459c84b7dfbbff584[m
+[32m+[m[32mfolderAsset: yes[m
+[32m+[m[32mtimeCreated: 1448241187[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mDefaultImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Resources/Prefab/Charactor/MainCharactor.prefab b/Assets/Resources/Prefab/Charactor/MainCharactor.prefab[m
+[1mnew file mode 100644[m
+[1mindex 0000000..84aa033[m
+Binary files /dev/null and b/Assets/Resources/Prefab/Charactor/MainCharactor.prefab differ
+[1mdiff --git a/Assets/Resources/Prefab/Charactor/MainCharactor.prefab.meta b/Assets/Resources/Prefab/Charactor/MainCharactor.prefab.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..d39a142[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Resources/Prefab/Charactor/MainCharactor.prefab.meta[m
+[36m@@ -0,0 +1,8 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 0c3fee65de3ecf946a40b54c286b5cc7[m
+[32m+[m[32mtimeCreated: 1448295571[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mNativeFormatImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab b/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab[m
+[1mnew file mode 100644[m
+[1mindex 0000000..df90001[m
+Binary files /dev/null and b/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab differ
+[1mdiff --git a/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab.meta b/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..102035e[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab.meta[m
+[36m@@ -0,0 +1,8 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 19c072d609d6fc74f9aa01ea0caa42e7[m
+[32m+[m[32mtimeCreated: 1448241192[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mNativeFormatImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Resources/Prefab/CreatingObjects/UpObject/ButtonAcceleratorOverSprite.controller b/Assets/Resources/Prefab/CreatingObjects/UpObject/ButtonAcceleratorOverSprite.controller[m
+[1mindex 524b396..b879898 100644[m
+Binary files a/Assets/Resources/Prefab/CreatingObjects/UpObject/ButtonAcceleratorOverSprite.controller and b/Assets/Resources/Prefab/CreatingObjects/UpObject/ButtonAcceleratorOverSprite.controller differ
+[1mdiff --git a/Assets/SceneScript.cs b/Assets/SceneScript.cs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..460a17d[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/SceneScript.cs[m
+[36m@@ -0,0 +1,18 @@[m
+[32m+[m[32m﻿using UnityEngine;[m
+[32m+[m[32musing System.Collections;[m
+[32m+[m
+[32m+[m[32mpublic class SceneScript : MonoBehaviour {[m
+[32m+[m
+[32m+[m[32m    private LevelManager m_levelManager;[m
+[32m+[m	[32m// Use this for initialization[m
+[32m+[m	[32mvoid Start () {[m
+[32m+[m[32m        GameObject level = GameObject.Find("LevelManager");[m
+[32m+[m[32m        m_levelManager = level.GetComponent<LevelManager>();[m
+[32m+[m[32m        m_levelManager.StartCoroutine("LoadNextLevel", 1.0f);[m
+[32m+[m[32m    }[m
+[32m+[m[41m	[m
+[32m+[m	[32m// Update is called once per frame[m
+[32m+[m	[32mvoid Update () {[m
+[32m+[m[41m	[m
+[32m+[m	[32m}[m
+[32m+[m[32m}[m
+[1mdiff --git a/Assets/SceneScript.cs.meta b/Assets/SceneScript.cs.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..d9c1889[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/SceneScript.cs.meta[m
+[36m@@ -0,0 +1,12 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 6d7ac1852b9a8a146821cb525ae38ae9[m
+[32m+[m[32mtimeCreated: 1447994815[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mMonoImporter:[m
+[32m+[m[32m  serializedVersion: 2[m
+[32m+[m[32m  defaultReferences: [][m
+[32m+[m[32m  executionOrder: 0[m
+[32m+[m[32m  icon: {instanceID: 0}[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Scenes/00Splash.unity b/Assets/Scenes/00Splash.unity[m
+[1mindex 4181842..9d9aa3c 100644[m
+Binary files a/Assets/Scenes/00Splash.unity and b/Assets/Scenes/00Splash.unity differ
+[1mdiff --git a/Assets/Scenes/01StartMenu/01StartMenu.unity b/Assets/Scenes/01StartMenu/01StartMenu.unity[m
+[1mindex 860a8c2..3d3f884 100644[m
+Binary files a/Assets/Scenes/01StartMenu/01StartMenu.unity and b/Assets/Scenes/01StartMenu/01StartMenu.unity differ
+[1mdiff --git a/Assets/Scenes/sample.unity b/Assets/Scenes/sample.unity[m
+[1mindex ef9a93f..75a7888 100644[m
+Binary files a/Assets/Scenes/sample.unity and b/Assets/Scenes/sample.unity differ
+[1mdiff --git a/Assets/Scripts/CharactorConrol.cs b/Assets/Scripts/CharactorConrol.cs[m
+[1mdeleted file mode 100644[m
+[1mindex a369807..0000000[m
+[1m--- a/Assets/Scripts/CharactorConrol.cs[m
+[1m+++ /dev/null[m
+[36m@@ -1,63 +0,0 @@[m
+[31m-﻿using System;[m
+[31m-using UnityEngine;[m
+[31m-using UnityStandardAssets.CrossPlatformInput;[m
+[31m-using UnityStandardAssets._2D;[m
+[31m-[m
+[31m-[RequireComponent(typeof(PlatformerCharacter2D))][m
+[31m-public class CharactorConrol : MonoBehaviour[m
+[31m-{[m
+[31m-    private PlatformerCharacter2D m_Character;[m
+[31m-    private bool m_Jump;[m
+[31m-    private float before_position_x;[m
+[31m-    private float before_position_y;[m
+[31m-    private int m_PositionSameCount = 0;[m
+[31m-    private bool m_MoveDirectionLeft = false;//trueなら右向き　falseなら左向きに歩く[m
+[31m-    private void Awake()[m
+[31m-    {[m
+[31m-        m_Character = GetComponent<PlatformerCharacter2D>();[m
+[31m-    }[m
+[31m-[m
+[31m-[m
+[31m-    private void Update()[m
+[31m-    {[m
+[31m-        //////////////////////////////////////////[m
+[31m-        // 向きが一定時間かわらなかったら、向きを変更//[m
+[31m-        if( (this.before_position_x == this.m_Character.transform.position.x) && (this.before_position_y == this.m_Character.transform.position.y) )[m
+[31m-        {[m
+[31m-            m_PositionSameCount++;[m
+[31m-        }[m
+[31m-        if(m_PositionSameCount>3)[m
+[31m-        {[m
+[31m-            m_MoveDirectionLeft = !m_MoveDirectionLeft;[m
+[31m-            m_PositionSameCount = 0;[m
+[31m-        }[m
+[31m-        ////////////////////////////////////////////[m
+[31m-        if (!m_Jump)[m
+[31m-        {[m
+[31m-            // Read the jump input in Update so button presses aren't missed.[m
+[31m-            //m_Jump = CrossPlatformInputManager.GetButtonDown("Jump");[m
+[31m-            m_Jump = Input.GetKeyDown(KeyCode.J);[m
+[31m-        }[m
+[31m-        this.before_position_x = this.m_Character.transform.position.x;[m
+[31m-        this.before_position_y = this.m_Character.transform.position.y;[m
+[31m-        [m
+[31m-[m
+[31m-    }[m
+[31m-    public void Jump()[m
+[31m-    {[m
+[31m-        this.m_Jump = true;[m
+[31m-    }[m
+[31m-[m
+[31m-[m
+[31m-    private void FixedUpdate()[m
+[31m-    {[m
+[31m-        // Read the inputs.[m
+[31m-        bool crouch = Input.GetKey(KeyCode.LeftControl);[m
+[31m-        // float h = CrossPlatformInputManager.GetAxis("Horizontal");[m
+[31m-        // Pass all parameters to the character control script.[m
+[31m-        float h = m_MoveDirectionLeft ? -1.0f : 1.0f;[m
+[31m-       [m
+[31m-        m_Character.Move(h, crouch, m_Jump);[m
+[31m-        m_Jump = false;[m
+[31m-    }[m
+[31m-}[m
+\ No newline at end of file[m
+[1mdiff --git a/Assets/Scripts/CharactorConrol.cs.meta b/Assets/Scripts/CharactorConrol.cs.meta[m
+[1mdeleted file mode 100644[m
+[1mindex 6b94899..0000000[m
+[1m--- a/Assets/Scripts/CharactorConrol.cs.meta[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-fileFormatVersion: 2[m
+[31m-guid: 86fdab340d756fc4597e5eecfb448f4c[m
+[31m-timeCreated: 1447642365[m
+[31m-licenseType: Free[m
+[31m-MonoImporter:[m
+[31m-  serializedVersion: 2[m
+[31m-  defaultReferences: [][m
+[31m-  executionOrder: 0[m
+[31m-  icon: {instanceID: 0}[m
+[31m-  userData: [m
+[31m-  assetBundleName: [m
+[31m-  assetBundleVariant: [m
+[1mdiff --git a/Assets/Scripts/CharactorControl.cs b/Assets/Scripts/CharactorControl.cs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..54548cc[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Scripts/CharactorControl.cs[m
+[36m@@ -0,0 +1,86 @@[m
+[32m+[m[32m﻿using System;[m
+[32m+[m[32musing UnityEngine;[m
+[32m+[m[32musing UnityStandardAssets.CrossPlatformInput;[m
+[32m+[m[32musing UnityStandardAssets._2D;[m
+[32m+[m[32musing Assets.Network;[m
+[32m+[m[32m[RequireComponent(typeof(PlatformerCharacter2D))][m
+[32m+[m[32mpublic class CharactorControl : MonoBehaviour[m
+[32m+[m[32m{[m
+[32m+[m[32m    private PlatformerCharacter2D m_Character;[m
+[32m+[m[32m    private CharactorInfoEmitter m_emitter;[m
+[32m+[m[32m    private bool m_Jump;[m
+[32m+[m[32m    public bool getJump()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        return m_Jump;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[41m   [m
+[32m+[m[32m    private float before_position_x;[m
+[32m+[m[32m    private float before_position_y;[m
+[32m+[m[32m    private int m_PositionSameCount = 0;[m
+[32m+[m[32m    private bool m_Clouch;//ネットから取得するため追加[m
+[32m+[m[32m    private bool m_MoveDirectionLeft = false;//trueなら右向き　falseなら左向きに歩く[m
+[32m+[m[32m    public bool getMoveDirection()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        return m_MoveDirectionLeft;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    public bool getClouch()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        return m_Clouch;[m[41m [m
+[32m+[m[32m    }[m
+[32m+[m[32m    private void Start()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        this.m_emitter = new CharactorInfoEmitter(this);[m
+[32m+[m[32m        //m_emitter.StartEmit();[m
+[32m+[m[32m    }[m
+[32m+[m[32m    private void Awake()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        m_Character = this.gameObject.GetComponentInChildren<PlatformerCharacter2D>();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[32m    private void Update()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        //////////////////////////////////////////[m
+[32m+[m[32m        // 向きが一定時間かわらなかったら、向きを変更//[m
+[32m+[m[32m        if ( (this.before_position_x == this.m_Character.transform.position.x) && (this.before_position_y == this.m_Character.transform.position.y) )[m
+[32m+[m[32m        {[m
+[32m+[m[32m            m_PositionSameCount++;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        if(m_PositionSameCount>3)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            m_MoveDirectionLeft = !m_MoveDirectionLeft;[m
+[32m+[m[32m            m_PositionSameCount = 0;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        ////////////////////////////////////////////[m
+[32m+[m[32m        if (!m_Jump)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            // Read the jump input in Update so button presses aren't missed.[m
+[32m+[m[32m            //m_Jump = CrossPlatformInputManager.GetButtonDown("Jump");[m
+[32m+[m[32m            //m_Jump = Input.GetKeyDown(KeyCode.J);[m
+[32m+[m[32m        }[m
+[32m+[m[32m        this.before_position_x = this.m_Character.transform.position.x;[m
+[32m+[m[32m        this.before_position_y = this.m_Character.transform.position.y;[m
+[32m+[m[41m        [m
+[32m+[m
+[32m+[m[32m    }[m
+[32m+[m[32m    public void Jump()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        this.m_Jump = true;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[32m    private void FixedUpdate()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        // Read the inputs.[m
+[32m+[m[32m        bool crouch = Input.GetKey(KeyCode.LeftControl);[m
+[32m+[m[32m        m_Clouch = crouch;[m
+[32m+[m[32m        // float h = CrossPlatformInputManager.GetAxis("Horizontal");[m
+[32m+[m[32m        // Pass all parameters to the character control script.[m
+[32m+[m[32m        float h = m_MoveDirectionLeft ? -1.0f : 1.0f;[m
+[32m+[m[41m       [m
+[32m+[m[32m        m_Character.Move(h, crouch, m_Jump);[m
+[32m+[m[32m        m_Jump = false;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/Assets/Scripts/CharactorControl.cs.meta b/Assets/Scripts/CharactorControl.cs.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..3dd005d[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Scripts/CharactorControl.cs.meta[m
+[36m@@ -0,0 +1,12 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 5ae78ad89c377134ea87ce2c2f6b3038[m
+[32m+[m[32mtimeCreated: 1448240260[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mMonoImporter:[m
+[32m+[m[32m  serializedVersion: 2[m
+[32m+[m[32m  defaultReferences: [][m
+[32m+[m[32m  executionOrder: 0[m
+[32m+[m[32m  icon: {instanceID: 0}[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Scripts/CharactorControlWithNet.cs b/Assets/Scripts/CharactorControlWithNet.cs[m
+[1mnew file mode 100644[m
+[1mindex 0000000..44877b7[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Scripts/CharactorControlWithNet.cs[m
+[36m@@ -0,0 +1,115 @@[m
+[32m+[m[32m﻿using System;[m
+[32m+[m[32musing UnityEngine;[m
+[32m+[m[32musing UnityStandardAssets.CrossPlatformInput;[m
+[32m+[m[32musing UnityStandardAssets._2D;[m
+[32m+[m[32musing SocketIO;[m
+[32m+[m[32musing Assets.Network;[m
+[32m+[m[32m[RequireComponent(typeof(PlatformerCharacter2D))][m
+[32m+[m[32mpublic class CharactorControlWithNet : MonoBehaviour[m
+[32m+[m[32m{[m
+[32m+[m[32m    private PlatformerCharacter2D m_Character;[m
+[32m+[m[32m    private static SocketIOComponent socket = null;[m
+[32m+[m[32m    private string owner_id;[m
+[32m+[m[32m    private bool m_Jump;[m
+[32m+[m[32m    private bool m_Clouch;//ネットから取得するため追加[m
+[32m+[m[32m    private int m_PositionSameCount = 0;[m
+[32m+[m[32m    private bool m_MoveDirectionLeft = false;//trueなら右向き　falseなら左向きに歩く[m
+[32m+[m
+[32m+[m[32m    //以下ネットワーク通信用の処理系[m
+[32m+[m[32m    readonly static string POSITION_X = "x";[m
+[32m+[m[32m    readonly static string POSITION_Y = "y";[m
+[32m+[m[32m    readonly static string POSITION_Z = "z";[m
+[32m+[m[32m    readonly static string ROTATE_X   = "rx";[m
+[32m+[m[32m    readonly static string ROTATE_Y = "ry";[m
+[32m+[m[32m    readonly static string ROTATE_Z = "rz";[m
+[32m+[m[32m    readonly static string IS_JUMP = "J";[m
+[32m+[m[32m    readonly static string MOVE_DIR = "MD";[m
+[32m+[m[32m    readonly static string IS_CLOUCH = "C";[m
+[32m+[m[32m    readonly static string EMIT_TIME = "ET";[m
+[32m+[m[32m    readonly static string OWNER_ID = "OI";[m
+[32m+[m[32m    private float last_data_owner_time; //最後に処理したデータをオーナーが送信した時刻[m
+[32m+[m
+[32m+[m[41m   [m
+[32m+[m
+[32m+[m[32m    private void Awake()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        m_Character = this.gameObject.GetComponentInChildren<PlatformerCharacter2D>();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void Start()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        if (socket == null)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            try[m
+[32m+[m[32m            {[m
+[32m+[m[32m                GameObject go = GameObject.Find("SocketIO");[m
+[32m+[m[32m                socket = go.GetComponent<SocketIOComponent>();[m
+[32m+[m[32m                socket.On("CharactorUpdate", OnCharactorUpdate);[m
+[32m+[m[41m              [m
+[32m+[m[32m            }[m
+[32m+[m[32m            catch (Exception e)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                Debug.Log("Cannot found server interface program!");[m
+[32m+[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[41m       [m
+[32m+[m[32m    }[m
+[32m+[m[32m    private void OnCharactorUpdate(SocketIOEvent e)[m
+[32m+[m[32m    {[m
+[32m+[m[32m        JSONObject json = e.data;[m[41m   [m
+[32m+[m[32m        if (json.GetField(OWNER_ID).str == socket.sid) //自分からの指定は更新しない[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        if (json.GetField(OWNER_ID).str != this.owner_id) //キャラクターのオーナーからの指定でなければ更新しない[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        float emit_time = json.GetField(EMIT_TIME).f;[m
+[32m+[m[32m        //通信の入れ違いを防ぐために、最後に受け取って処理したデータの オーナー側での送信時時刻と、今回のデータのオーナー側での送信時時刻を比べる[m
+[32m+[m[32m        if (last_data_owner_time >= emit_time)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        //以下、オブジェクトをパースして情報を取り出す。[m
+[32m+[m[32m        float position_x = json.GetField(POSITION_X).f;[m
+[32m+[m[32m        float position_y = json.GetField(POSITION_Y).f;[m
+[32m+[m[32m        float position_z = json.GetField(POSITION_Z).f;[m
+[32m+[m[32m        float rotate_x = json.GetField(ROTATE_X).f;[m
+[32m+[m[32m        float rotate_y = json.GetField(ROTATE_Y).f;[m
+[32m+[m[32m        float rotate_z = json.GetField(ROTATE_Z).f;[m
+[32m+[m[32m        bool direction = json.GetField(MOVE_DIR).b;[m
+[32m+[m[32m        bool is_jump = json.GetField(IS_JUMP).b;[m[41m    [m
+[32m+[m[32m        bool is_crouch = json.GetField(IS_CLOUCH).b;[m
+[32m+[m[41m        [m
+[32m+[m[32m        TaskSystem.getInstance().addTask(() =>[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Debug.Log("呼び出しあり");[m
+[32m+[m[32m            //場所情報などを挿入していく[m
+[32m+[m[32m            this.m_Character.transform.position = new Vector3(position_x, position_y, position_z);[m
+[32m+[m[32m            this.m_Character.transform.rotation = Quaternion.Euler(rotate_x, rotate_y, rotate_z);[m
+[32m+[m[32m            this.m_Jump = is_jump;[m
+[32m+[m[32m            this.m_MoveDirectionLeft = direction;[m
+[32m+[m[32m            this.m_Clouch = is_crouch;[m
+[32m+[m[32m            this.last_data_owner_time = emit_time;[m
+[32m+[m[32m        });[m
+[32m+[m[41m        [m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void Update()[m
+[32m+[m[32m    {[m
+[32m+[m[32m    }[m
+[32m+[m[32m    public void Jump()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        this.m_Jump = true;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void FixedUpdate()[m
+[32m+[m[32m    {[m
+[32m+[m[32m        // Read the inputs.[m
+[32m+[m[32m        //bool crouch = Input.GetKey(KeyCode.LeftControl);[m
+[32m+[m[32m        // float h = CrossPlatformInputManager.GetAxis("Horizontal");[m
+[32m+[m[32m        // Pass all parameters to the character control script.[m
+[32m+[m[32m        float h = m_MoveDirectionLeft ? -1.0f : 1.0f;[m
+[32m+[m
+[32m+[m[32m        m_Character.Move(h, m_Clouch, m_Jump);[m
+[32m+[m[32m        m_Jump = false;[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/Assets/Scripts/CharactorControlWithNet.cs.meta b/Assets/Scripts/CharactorControlWithNet.cs.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..cbc75ca[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Scripts/CharactorControlWithNet.cs.meta[m
+[36m@@ -0,0 +1,12 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 788e4abf0db37ae469e3fa87ba771184[m
+[32m+[m[32mtimeCreated: 1448240260[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mMonoImporter:[m
+[32m+[m[32m  serializedVersion: 2[m
+[32m+[m[32m  defaultReferences: [][m
+[32m+[m[32m  executionOrder: 0[m
+[32m+[m[32m  icon: {instanceID: 0}[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Scripts/LevelManager.cs b/Assets/Scripts/LevelManager.cs[m
+[1mindex 8892bf3..dbe44ae 100644[m
+[1m--- a/Assets/Scripts/LevelManager.cs[m
+[1m+++ b/Assets/Scripts/LevelManager.cs[m
+[36m@@ -4,15 +4,18 @@[m [musing System.Collections;[m
+ public class LevelManager : MonoBehaviour[m
+ {[m
+     public Canvas canvas;[m
+[31m-[m
+[32m+[m[32m    public float next_level_wait = 5.0f;[m
+     public void Start()[m
+     {[m
+[31m-        StartCoroutine("LoadNextLevel",1.0f);[m
+ [m
+     }[m
+[32m+[m[32m    public void LoadNextLevelWithFade(string name)[m
+[32m+[m[32m    {[m
+[32m+[m[32m        StartCoroutine("LoadNextLevel", 1.0f);[m
+[32m+[m[32m    }[m
+     public IEnumerator LoadNextLevel()[m
+     {[m
+[31m-        yield return new WaitForSeconds(5.0f);[m
+[32m+[m[32m        yield return new WaitForSeconds(next_level_wait);[m
+        canvas.GetComponent<Animator>().SetTrigger("EndScene");[m
+         yield return new WaitForSeconds(1.0f);[m
+         Application.LoadLevel(Application.loadedLevel + 1);[m
+[1mdiff --git a/Assets/Scripts/ObjectCreator.cs b/Assets/Scripts/ObjectCreator.cs[m
+[1mindex cfee9bd..262a81c 100644[m
+[1m--- a/Assets/Scripts/ObjectCreator.cs[m
+[1m+++ b/Assets/Scripts/ObjectCreator.cs[m
+[36m@@ -23,14 +23,19 @@[m [mnamespace CanvasGame.ObjectCreator[m
+     {[m
+         NONE, BOUNCE, HEAVY_FRICTION,[m
+     };[m
+[32m+[m[32m    //[m
+[32m+[m[32m    // ゲームのプレイヤーが使うオブジェクト作成ツールの共通インターフェース[m
+[32m+[m[32m    //[m[41m [m
+[32m+[m[32m    //[m
+[32m+[m[32m    //[m
+     public interface IObjectCreatorTool[m
+     {[m
+[31m-        ObjectType getType(); [m
+[31m-        void OnControlDown(Vector3 down_position);[m
+[31m-        void OnControlOn(Vector3 control_position);[m
+[31m-        void OnControlUp(Vector3 up_position);[m
+[31m-        void OnControlDefault(Vector3 control_position);[m
+[31m-        void create();[m
+[32m+[m[32m        ObjectType getType(); //オブジェクトのタイプを返す[m
+[32m+[m[32m        void OnControlDown(Vector3 down_position);//コントロールが押されたときの処理[m
+[32m+[m[32m        void OnControlOn(Vector3 control_position);//コントロールが押されているときの処理[m
+[32m+[m[32m        void OnControlUp(Vector3 up_position);//コントロールが上がった時の処理[m
+[32m+[m[32m        void OnControlDefault(Vector3 control_position);//通常状態の処理[m
+[32m+[m[41m       [m
+     }[m
+     public abstract class ObjectCreatorTool[m
+     {[m
+[36m@@ -41,6 +46,17 @@[m [mnamespace CanvasGame.ObjectCreator[m
+             this.creator_interface = creator_interface;[m
+         }[m
+     }[m
+[32m+[m[32m    /**[m
+[32m+[m[32m     * <summary>[m
+[32m+[m[32m        オブジェクトツールのマネージャークラス[m
+[32m+[m[32m        ○ これを用いて、現在のツールを取得する。加えて、現在のツールを取得したりインスタンスを取得したりする。[m
+[32m+[m[32m        ○ シングルトンだが、引数もあるため、最初にInit関数を実行する[m
+[32m+[m[32m        ○ 利用するオブジェクトは、OnChangeイベントハンドラにデリゲートを追加して、変更を伝えてもらう。[m
+[32m+[m[32m                  利用例 : Tool変更時にアニメーショントリガを実行(アニメーションを実行するオブジェクト上で)[m
+[32m+[m[32m                                OnChange+=(sender,event)=>{ this.GetComponent<Animator>().setTrigger("changeTool");   }[m
+[32m+[m[32m        </summary>[m
+[32m+[m
+[32m+[m[32m     **/[m
+     public class ObjectCreatorToolManager[m
+     {[m
+         private static ObjectCreatorToolManager __instance = null;[m
+[36m@@ -80,6 +96,9 @@[m [mnamespace CanvasGame.ObjectCreator[m
+             OnChange(this, EventArgs.Empty);[m
+         }[m
+     }[m
+[32m+[m[32m    /**[m
+[32m+[m[32m     * 地面を作成するラインツール[m
+[32m+[m[32m     **/[m
+     public class GroundLineTool:ObjectCreatorTool,IObjectCreatorTool{[m
+         private Vector3 start_contoler_position;[m
+         private Vector3 start_line_position;[m
+[36m@@ -157,11 +176,11 @@[m [mnamespace CanvasGame.ObjectCreator[m
+         {[m
+ [m
+         }[m
+[31m-        public void create()[m
+[31m-        {[m
+[31m-[m
+[31m-        }[m
+[32m+[m[41m       [m
+     }[m
+[32m+[m[32m    /**[m
+[32m+[m[32m     * ジャンプするオブジェクトを作成するツール[m
+[32m+[m[32m     **/[m
+     public class UpArrowTools : ObjectCreatorTool, IObjectCreatorTool[m
+     {[m
+         private Vector3 start_contoler_position;[m
+[36m@@ -192,14 +211,11 @@[m [mnamespace CanvasGame.ObjectCreator[m
+         {[m
+ [m
+         }[m
+[31m-        public void create()[m
+[31m-        {[m
+[31m-[m
+[31m-        }[m
+[32m+[m[41m        [m
+     }[m
+     public class ObjectCreatorFunctions[m
+     {[m
+[31m-        public static void ObjectCreator(Vector3 position, Quaternion rotate, Vector3 scale, ObjectType object_type, ObjectColliderMaterial material = ObjectColliderMaterial.NONE)[m
+[32m+[m[32m        public static void ObjectCreator(Vector3 position, Quaternion rotate, Vector3 scale, ObjectType object_type, ObjectColliderMaterial material = ObjectColliderMaterial.NONE,Action<GameObject> callback=null)[m
+         {[m
+             Debug.Log("ObjectCreator" + position.x);[m
+             TaskSystem.getInstance().addTask([m
+[36m@@ -210,6 +226,7 @@[m [mnamespace CanvasGame.ObjectCreator[m
+                     game_object.transform.position = position;[m
+                     game_object.transform.rotation = rotate;[m
+                     game_object.transform.localScale = scale;[m
+[32m+[m[41m                    [m
+                     game_object.SetActive(true);[m
+                     switch (material)[m
+                     {[m
+[36m@@ -218,6 +235,8 @@[m [mnamespace CanvasGame.ObjectCreator[m
+                         default:[m
+                             break;[m
+                     }[m
+[32m+[m[32m                    if (callback != null)[m
+[32m+[m[32m                        callback(game_object);[m
+                 });[m
+             [m
+         }[m
+[36m@@ -232,7 +251,9 @@[m [mnamespace CanvasGame.ObjectCreator[m
+         void create(Vector3 position, Vector3 rotate, Vector3 scale, ObjectType object_type, ObjectColliderMaterial material = ObjectColliderMaterial.NONE);[m
+     }[m
+ [m
+[31m-   [m
+[32m+[m[32m   /// <summary>[m
+[32m+[m[32m   /// シングルプレイヤー用のオブジェクト[m
+[32m+[m[32m   /// </summary>[m
+     public class ObjectCreatorSinglePlay : IObjectCreatorInterface[m
+     {[m
+       public void create(Vector3 position, Vector3 rotate, Vector3 scale, ObjectType object_type, ObjectColliderMaterial material = ObjectColliderMaterial.NONE)[m
+[36m@@ -241,6 +262,9 @@[m [mnamespace CanvasGame.ObjectCreator[m
+       }[m
+ [m
+     }[m
+[32m+[m[32m    /// <summary>[m
+[32m+[m[32m    /// ネットワークプレイ用のオブジェクト[m
+[32m+[m[32m    /// </summary>[m
+     public class ObjectCreatorNetworkPlay : IObjectCreatorInterface[m
+     {[m
+         private static SocketIOComponent socket = null;[m
+[36m@@ -253,14 +277,22 @@[m [mnamespace CanvasGame.ObjectCreator[m
+         readonly static string SCALE_Y = "sy";[m
+         readonly static string SCALE_Z = "sz";[m
+         readonly static string TYPE_OBJECT = "TO";[m
+[32m+[m[32m        readonly static string NETWORK_ID = "NI";[m
+[32m+[m[32m        Dictionary<string,GameObject> object_network_ids;[m
+         public ObjectCreatorNetworkPlay()[m
+         {[m
+             if (socket == null)[m
+             {[m
+[31m-                GameObject go = GameObject.Find("SocketIO");[m
+[31m-                socket = go.GetComponent<SocketIOComponent>();[m
+[31m-                socket.On("newobject",OnNewObject);[m
+[31m-               [m
+[32m+[m[32m                try {[m
+[32m+[m[32m                    GameObject go = GameObject.Find("SocketIO");[m
+[32m+[m[32m                    socket = go.GetComponent<SocketIOComponent>();[m
+[32m+[m[32m                    socket.On("newobject", OnNewObject);[m
+[32m+[m[32m                }catch(Exception e)[m
+[32m+[m[32m                {[m
+[32m+[m[32m                    Debug.Log("Cannot found server interface program!");[m
+[32m+[m[41m                    [m
+[32m+[m[32m                }[m
+[32m+[m[32m                object_network_ids = new Dictionary<string, GameObject>();[m
+             }[m
+         }[m
+         public void OnNewObject(SocketIOEvent e)[m
+[36m@@ -277,10 +309,14 @@[m [mnamespace CanvasGame.ObjectCreator[m
+             float scale_x = obj.GetField(SCALE_X).f;[m
+             float scale_y = obj.GetField(SCALE_Y).f;[m
+             float scale_z = obj.GetField(SCALE_Z).f;[m
+[32m+[m[32m            string network_id = obj.GetField(NETWORK_ID).str;[m
+             [m
+[31m-[m
+[32m+[m[32m            //object_network_ids.Add(network_id,game)[m
+             ObjectCreatorFunctions.ObjectCreator(new Vector3(position_x, position_y, position_z), Quaternion.AngleAxis(rotate_angle, new Vector3(0, 0, 1))[m
+[31m-                , new Vector3(scale_x, scale_y, scale_z), type);[m
+[32m+[m[32m                , new Vector3(scale_x, scale_y, scale_z), type,ObjectColliderMaterial.NONE,[m
+[32m+[m[32m                (game_object)=> {[m
+[32m+[m[32m                    object_network_ids.Add(network_id, game_object);[m
+[32m+[m[32m                });[m
+            [m
+            [m
+         }[m
+[36m@@ -295,6 +331,7 @@[m [mnamespace CanvasGame.ObjectCreator[m
+             jsonObject.AddField(SCALE_Y, scale.y);[m
+             jsonObject.AddField(SCALE_Z, scale.z);[m
+             jsonObject.AddField(TYPE_OBJECT, object_type.ToString());[m
+[32m+[m[41m           [m
+             socket.Emit("newobject", jsonObject);   [m
+         }[m
+     }[m
+[1mdiff --git a/Assets/Scripts/PhisicsObjectCreator.cs b/Assets/Scripts/PhisicsObjectCreator.cs[m
+[1mindex be0a5a1..b2eb828 100644[m
+[1m--- a/Assets/Scripts/PhisicsObjectCreator.cs[m
+[1m+++ b/Assets/Scripts/PhisicsObjectCreator.cs[m
+[36m@@ -50,7 +50,7 @@[m [mpublic class PhisicsObjectCreator : MonoBehaviour {[m
+     }[m
+     void Awake()[m
+     {[m
+[31m-        ObjectCreatorToolManager.Init(new ObjectCreatorNetworkPlay(), this.gameObject);[m
+[32m+[m[32m        ObjectCreatorToolManager.Init(new ObjectCreatorSinglePlay(), this.gameObject);[m
+     }[m
+     // Use this for initialization[m
+     void Start() {[m
+[1mdiff --git a/Assets/Scripts/TaskSystem.cs b/Assets/Scripts/TaskSystem.cs[m
+[1mindex ceeade8..d241539 100644[m
+[1m--- a/Assets/Scripts/TaskSystem.cs[m
+[1m+++ b/Assets/Scripts/TaskSystem.cs[m
+[36m@@ -20,7 +20,7 @@[m [mpublic class TaskSystem : MonoBehaviour {[m
+     Queue<Action> fixed_action_queue;[m
+    private static TaskSystem instance;[m
+ 	// Use this for initialization[m
+[31m-	void Start () {[m
+[32m+[m	[32mvoid Awake () {[m
+         if (instance != null && instance != this)[m
+         {[m
+             Destroy(gameObject);[m
+[36m@@ -50,8 +50,12 @@[m [mpublic class TaskSystem : MonoBehaviour {[m
+ 	void Update () {[m
+         while (action_queue.Count > 0)[m
+         {[m
+[31m-            action_queue.Dequeue()();[m
+[31m-            [m
+[32m+[m[32m            try {[m
+[32m+[m[32m                action_queue.Dequeue()();[m
+[32m+[m[32m            }catch(Exception e)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                Debug.Log(e.Message);[m
+[32m+[m[32m            }[m
+         }[m
+ [m
+     }[m
+[1mdiff --git a/Assets/Sprite/Script/ObjectPoolManager.cs b/Assets/Sprite/Script/ObjectPoolManager.cs[m
+[1mindex f0d7ed1..6b61aca 100644[m
+[1m--- a/Assets/Sprite/Script/ObjectPoolManager.cs[m
+[1m+++ b/Assets/Sprite/Script/ObjectPoolManager.cs[m
+[36m@@ -98,10 +98,12 @@[m [mpublic class GameObjectPool[m
+     {[m
+         if (prepare_list.Count > 0)[m
+         {[m
+[32m+[m[41m                     [m
+             GameObject return_object = prepare_list[0];[m
+             prepare_list.RemoveAt(0);[m
+             return_object.SetActive(true);[m
+             executing_list.Add(return_object);[m
+[32m+[m[41m            [m
+             return return_object;[m
+         }[m
+         else[m
+[1mdiff --git a/Assets/Standard Assets/2D/Animator/2dCharacterAnimator.controller b/Assets/Standard Assets/2D/Animator/2dCharacterAnimator.controller[m
+[1mindex 144d621..7036278 100644[m
+Binary files a/Assets/Standard Assets/2D/Animator/2dCharacterAnimator.controller and b/Assets/Standard Assets/2D/Animator/2dCharacterAnimator.controller differ
+[1mdiff --git a/Assets/Standard Assets/2D/Prefabs/CharacterRobotBoy.prefab b/Assets/Standard Assets/2D/Prefabs/CharacterRobotBoy.prefab[m
+[1mindex fd452c3..ccf9e97 100644[m
+Binary files a/Assets/Standard Assets/2D/Prefabs/CharacterRobotBoy.prefab and b/Assets/Standard Assets/2D/Prefabs/CharacterRobotBoy.prefab differ
+[1mdiff --git a/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab b/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab[m
+[1mnew file mode 100644[m
+[1mindex 0000000..e83769e[m
+Binary files /dev/null and b/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab differ
+[1mdiff --git a/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab.meta b/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab.meta[m
+[1mnew file mode 100644[m
+[1mindex 0000000..76b21ef[m
+[1m--- /dev/null[m
+[1m+++ b/Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab.meta[m	
+[36m@@ -0,0 +1,8 @@[m
+[32m+[m[32mfileFormatVersion: 2[m
+[32m+[m[32mguid: 7b8f9137d482bee4d82a833fa7ae8113[m
+[32m+[m[32mtimeCreated: 1448098238[m
+[32m+[m[32mlicenseType: Free[m
+[32m+[m[32mNativeFormatImporter:[m
+[32m+[m[32m  userData:[m[41m [m
+[32m+[m[32m  assetBundleName:[m[41m [m
+[32m+[m[32m  assetBundleVariant:[m[41m [m
+[1mdiff --git a/Assets/Standard Assets/2D/Scripts/PlatformerCharacter2D.cs b/Assets/Standard Assets/2D/Scripts/PlatformerCharacter2D.cs[m
+[1mindex 1e1faa6..25a342d 100644[m
+[1m--- a/Assets/Standard Assets/2D/Scripts/PlatformerCharacter2D.cs[m	
+[1m+++ b/Assets/Standard Assets/2D/Scripts/PlatformerCharacter2D.cs[m	
+[36m@@ -23,10 +23,10 @@[m [mnamespace UnityStandardAssets._2D[m
+         private void Awake()[m
+         {[m
+             // Setting up references.[m
+[31m-            m_GroundCheck = transform.Find("GroundCheck");[m
+[31m-            m_CeilingCheck = transform.Find("CeilingCheck");[m
+[31m-            m_Anim = GetComponent<Animator>();[m
+[31m-            m_Rigidbody2D = GetComponent<Rigidbody2D>();[m
+[32m+[m[32m            m_GroundCheck = this.gameObject.transform.Find("GroundCheck");[m
+[32m+[m[32m            m_CeilingCheck = this.gameObject.transform.Find("CeilingCheck");[m
+[32m+[m[32m            m_Anim = this.gameObject.GetComponent<Animator>();[m
+[32m+[m[32m            m_Rigidbody2D = this.gameObject.GetComponent<Rigidbody2D>();[m
+         }[m
+ [m
+ [m
+[1mdiff --git a/Assets/VelocityObjectScript.cs b/Assets/VelocityObjectScript.cs[m
+[1mindex af04071..b568e44 100644[m
+[1m--- a/Assets/VelocityObjectScript.cs[m
+[1m+++ b/Assets/VelocityObjectScript.cs[m
+[36m@@ -14,7 +14,7 @@[m [mpublic class VelocityObjectScript : MonoBehaviour {[m
+ 	}[m
+     void OnTriggerEnter2D(Collider2D collision)[m
+     {[m
+[31m-        CharactorConrol ch_control = collision.GetComponent<CharactorConrol>();[m
+[32m+[m[32m        CharactorControl ch_control = collision.GetComponent<CharactorControl>();[m
+         if (ch_control!=null)[m
+         {[m
+             //ch_control.Jump();[m
+[1mdiff --git a/ProjectSettings/Physics2DSettings.asset b/ProjectSettings/Physics2DSettings.asset[m
+[1mindex 3d3e777..6bbf7a5 100644[m
+Binary files a/ProjectSettings/Physics2DSettings.asset and b/ProjectSettings/Physics2DSettings.asset differ
+warning: LF will be replaced by CRLF in Assets/Network.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Network/CharactorInfoEmitter.cs.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Network/NetworkCharactor.prefab.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/PlayerStateChanger.cs.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Resources/Prefab/Charactor.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Resources/Prefab/Charactor/MainCharactor.prefab.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Resources/Prefab/Charactor/NetworkCharactor.prefab.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/SceneScript.cs.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Scripts/CharactorControl.cs.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Scripts/CharactorControlWithNet.cs.meta.
+The file will have its original line endings in your working directory.
+warning: LF will be replaced by CRLF in Assets/Standard Assets/2D/Prefabs/CharactorRobotNetworkVer.prefab.meta.
+The file will have its original line endings in your working directory.
