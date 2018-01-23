@@ -24,6 +24,7 @@ namespace Assets.innerState
         [SerializeField] StateAccess access;
         [SerializeField] AnimatedStateChanger state_getter;
 
+        public bool EnableScoreMonitor { get; set; }
         public void OnCoinAllGet()
         {
             ExecuteEvents.Execute<IRecieveStateChange>(gameObject, null,
@@ -50,21 +51,27 @@ namespace Assets.innerState
             );
         }
 
+        
         // Use this for initialization
         void Start()
         {
+            EnableScoreMonitor = false;
             TaskSystem.getInstance().addTask(() =>
             {
+                Initializer.getInstance().InitializeAll();
                 ScoreModel.getInstance().StopTimer();
                 ExecuteEvents.Execute<IRecieveStateChange>(gameObject, null,
                     (inter, rec) => { inter.OnChangeState(access.getState(AnimatedStateType.NORMAL)); }
                 );
+                EnableScoreMonitor = true;
+                ;
             });
         }
 
         // Update is called once per frame
         void Update()
         {
+            if (!EnableScoreMonitor) return;
             //スコア状態の監視
             Debug.Log(ScoreModel.getInstance().getCoinScore());
 

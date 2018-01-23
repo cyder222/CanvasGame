@@ -23,10 +23,11 @@ public class Initializer : MonoBehaviour {
     }
     void Awake()
     {
+        //InitializeAll();
         if (instance != null && instance != this)
         {
             Destroy(gameObject);
-            print("Duplicate TaskSytem! self destruct!");
+            print("Duplicate Initializer! self destruct!");
         }
         else
         {

@@ -35,6 +35,7 @@ namespace Assets.innerState
         public override void endState()
         {
             panel.UnpauseGame();
+            
         }
 
     }
