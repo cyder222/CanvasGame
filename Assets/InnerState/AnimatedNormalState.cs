@@ -12,6 +12,7 @@ namespace Assets.innerState
         [SerializeField]
         private PhisicsObjectCreator creator;
 
+
         void Awake()
         {
             InitializeList();
@@ -37,11 +38,10 @@ namespace Assets.innerState
             ScoreModel.getInstance().StopTimer();
             this.toolCanvas.GetComponent<Canvas>().enabled = false;
             BgmManager.Instance.Play("bo-ken");
-
         }
         public override void endState()
         {
-
+			Application.CaptureScreenshot(GlobalConstantValue.ScreenShotImageName);
         }
         public override void beginState()
         {
@@ -49,12 +49,10 @@ namespace Assets.innerState
             ScoreModel.getInstance().StartTimer();
             creator.enableCreator = true;
             this.toolCanvas.GetComponent<Canvas>().enabled = true;
-
         }
         public override AnimatedStateType getStateType()
         {
             return AnimatedStateType.NORMAL;
         }
-
     }
 }
