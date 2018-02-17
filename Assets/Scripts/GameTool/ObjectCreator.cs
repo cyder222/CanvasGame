@@ -131,6 +131,7 @@ namespace CanvasGame.ObjectCreator
                 TaskSystem.getInstance().addTask(() =>
                 {
                     LineRenderer renderer = parent_object.GetComponent<LineRenderer>();
+                    renderer.enabled = true;
 
                     // 線の幅
                     renderer.SetWidth(0.1f, 0.1f);
@@ -172,6 +173,8 @@ namespace CanvasGame.ObjectCreator
             float line_mag = line.magnitude;//線分の長さ xを増やす
             float line_angle = Mathf.Atan2(line_end_pos.y - line_start_pos.y, line_end_pos.x - line_start_pos.x);
             creator_interface.create(line_start_pos, new Vector3(0, 0, line_angle*Mathf.Rad2Deg), new Vector3(line_mag, 1, 1), this.getType());
+             LineRenderer renderer = parent_object.GetComponent<LineRenderer>();
+             renderer.enabled = false;
         }
         public void OnControlDefault(Vector3 control_position)
         {
